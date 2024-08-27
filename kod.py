@@ -2,7 +2,6 @@ import requests
 import warnings
 import pandas as pd
 import folium
-import geopandas as gpd
 import sys
 
 # Konsol çıktısını UTF-8 olarak ayarlıyoruz
@@ -142,15 +141,23 @@ def plot_temperature_on_map(df):
     # Sıcaklık değerine göre renkleri belirleyin
     def get_color(temp):
         if temp < 0:
-            return 'blue'
-        elif 0 <= temp < 10:
-            return 'cyan'
-        elif 10 <= temp < 20:
-            return 'lightcyan'  # Açık Cyan
-        elif 20 <= temp < 30:
-            return 'lightyellow'  # Açık Sarı
+            return '#0000ff'  # Mavi
+        elif 0 <= temp < 5:
+            return '#3399ff'  # Açık Mavi
+        elif 5 <= temp < 10:
+            return '#66ccff'  # Daha Açık Mavi
+        elif 10 <= temp < 15:
+            return '#00cccc'  # Cyan
+        elif 15 <= temp < 20:
+            return '#00b3b3'  # Daha Koyu Cyan
+        elif 20 <= temp < 25:
+            return '#ffff66'  # Açık Sarı
+        elif 25 <= temp < 30:
+            return '#ffcc33'  # Koyu Sarı
+        elif 30 <= temp < 35:
+            return '#ff9999'  # Açık Kırmızı
         else:
-            return 'darkred'  # Koyu Kırmızı
+            return '#ff3333'  # Koyu Kırmızı
     
     # Verileri harita üzerine ekleyin
     for idx, row in df_filtered.iterrows():
