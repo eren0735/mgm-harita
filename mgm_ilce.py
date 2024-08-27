@@ -3,6 +3,7 @@ import warnings
 import pandas as pd
 import plotly.figure_factory as ff
 import numpy as np
+import os
 
 warnings.filterwarnings("ignore", message="Unverified HTTPS request")
 
@@ -42,7 +43,7 @@ class MGMWeather:
         if not isinstance(city_data, list) or len(city_data) == 0:
             print(f"No data found for {self.location}")
             return
-        
+
         self.location_id = city_data[0].get("merkezId")
         self.longitude = city_data[0].get("boylam")
         self.latitude = city_data[0].get("enlem")
@@ -53,7 +54,7 @@ class MGMWeather:
         if not isinstance(city_current_weather, list) or len(city_current_weather) == 0:
             print(f"No weather data found for {self.location}")
             return
-        
+
         self.current_degree = city_current_weather[0].get("sicaklik")
 
     def get_current_temperature(self):
@@ -101,28 +102,54 @@ class MGMWeather:
 
 def get_all_provinces():
     return {
-        "adana": ["merkez", "seyhan", "cukurova", "yuregir", "ceyhan", "sarıçam", "akdeniz", "karaisalı", "karataş"],
+        "adana": [
+            "aladağ",
+            "ceyhan",
+            "çukurova",
+            "imamoglu",
+            "feke",
+            "karaisali",
+            "karataş",
+            "kozan",
+            "pozantı",
+            "saimbeyli",
+            "sarıçam",
+            "seyhan",
+            "tufanbeyli",
+            "Adana Havalimanı",
+            "yumurtalık",
+            "yüreğir"
+        ]
         # Diğer iller ve ilçeler
     }
 
 def fetch_all_weather_data():
-    provinces = get_all_provinces()
-    weather_data = []
+    csv_file = 'weather_data.csv'
+    
+    if os.path.exists(csv_file):
+        df = pd.read_csv(csv_file)
+        print("CSV dosyasından veri okundu.")
+    else:
+        provinces = get_all_provinces()
+        weather_data = []
 
-    for province, districts in provinces.items():
-        weather = MGMWeather(province)
-        for district in districts:
-            weather.district(district)
-            if weather.current_degree is not None:
-                weather_data.append({
-                    "Province": province.title(),
-                    "District": district.title(),
-                    "Latitude": weather.latitude,
-                    "Longitude": weather.longitude,
-                    "Temperature": weather.current_degree
-                })
+        for province, districts in provinces.items():
+            weather = MGMWeather(province)
+            for district in districts:
+                weather.district(district)
+                if weather.current_degree is not None:
+                    weather_data.append({
+                        "Province": province.title(),
+                        "District": district.title(),
+                        "Latitude": weather.latitude,
+                        "Longitude": weather.longitude,
+                        "Temperature": weather.current_degree
+                    })
 
-    df = pd.DataFrame(weather_data)
+        df = pd.DataFrame(weather_data)
+        df.to_csv(csv_file, index=False)
+        print("Veriler API'den çekildi ve CSV dosyasına yazıldı.")
+    
     return df
 
 def plot_temperature_on_map(df):
