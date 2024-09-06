@@ -1,180 +1,56 @@
-import requests
-import warnings
 import pandas as pd
-import folium
-import sys
+from geopy.geocoders import Nominatim
+import plotly.express as px
+import time
 
-# Konsol çıktısını UTF-8 olarak ayarlıyoruz
-sys.stdout.reconfigure(encoding='utf-8')
+# Geocoder'ı başlat
+geolocator = Nominatim(user_agent="geoapiExercises")
 
-# SSL uyarılarını yok saymak için
-warnings.filterwarnings("ignore", message="Unverified HTTPS request")
+# CSV dosyasını oku
+df = pd.read_csv("ports_and_details.csv")
 
-class MGMWeather:
-    def __init__(self, location):
-        self.location = self.clear_tr_character(location)
-        self.location_id = None
-        self.latitude = None
-        self.longitude = None
-        self.current_degree = None
-        self.district_name = None
-        self.target_location_details = None
+# Enlem ve boylam sütunlarını ekle
+df["latitude"] = None
+df["longitude"] = None
 
-    def clear_tr_character(self, city_name):
-        replacements = {
-            "ı": "i", "ü": "u", "ğ": "g", "ş": "s", "ö": "o", "ç": "c"
-        }
-        for tr_char, lat_char in replacements.items():
-            city_name = city_name.replace(tr_char, lat_char)
-        return city_name.lower()
+# Enlem ve boylamı almak için fonksiyon
+def get_lat_lon(sehir, ilce):
+    location = geolocator.geocode(f"{ilce}, {sehir}, Türkiye")
+    if location:
+        return location.latitude, location.longitude
+    return None, None
 
-    def request(self, url):
-        headers = {
-            "Host": "servis.mgm.gov.tr",
-            "Connection": "keep-alive",
-            "Accept": "application/json, text/plain, */*",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.122 Safari/537.36",
-            "Origin": "https://www.mgm.gov.tr"
-        }
-        # SSL doğrulamasını geçici olarak atlayın
-        response = requests.get(url, headers=headers, verify=False)
-        return response.json()
+# Tüm satırlar için enlem ve boylam bilgilerini doldur
+for index, row in df.iterrows():
+    sehir = row["Şehir"]
+    ilce = row["İlçe"]
+    lat, lon = get_lat_lon(sehir, ilce)
+    df.at[index, "latitude"] = lat
+    df.at[index, "longitude"] = lon
+    time.sleep(1)  # API taleplerini yavaşlatmak için
 
-    def fetch_data(self):
-        city_data_url = f"https://servis.mgm.gov.tr/web/merkezler?il={self.location}"
-        city_data = self.request(city_data_url)
+# Boş enlem-boylam verilerini çıkar
+df = df.dropna(subset=["latitude", "longitude"])
 
-        if not isinstance(city_data, list) or len(city_data) == 0:
-            print(f"No data found for {self.location}")
-            return
-        
-        self.location_id = city_data[0].get("merkezId")
-        self.longitude = city_data[0].get("boylam")
-        self.latitude = city_data[0].get("enlem")
+# Altıgen haritayı oluştur
+fig = px.density_mapbox(
+    df,
+    lat="latitude",
+    lon="longitude",
+    z="Sıcaklık",  # Sıcaklık verisi için
+    radius=10,  # Altıgen boyutu
+    center=dict(lat=38.9637, lon=35.2433),  # Türkiye'nin merkezi
+    zoom=5,
+    mapbox_style="carto-positron",
+    title="Türkiye Sıcaklık Dağılımı - Altıgen Görselleştirme"
+)
 
-        city_current_weather_url = f"https://servis.mgm.gov.tr/web/sondurumlar?merkezid={self.location_id}"
-        city_current_weather = self.request(city_current_weather_url)
+fig.update_layout(
+    mapbox=dict(
+        center=dict(lat=38.9637, lon=35.2433),
+        zoom=5
+    ),
+    title="Türkiye'deki Sıcaklık Dağılımı (Hexbin)"
+)
 
-        if not isinstance(city_current_weather, list) or len(city_current_weather) == 0:
-            print(f"No weather data found for {self.location}")
-            return
-        
-        self.current_degree = city_current_weather[0].get("sicaklik")
-
-    def get_current_temperature(self):
-        self.fetch_data()
-        return self.current_degree
-
-    def district(self, d=None):
-        if d:
-            self.district_name = self.clear_tr_character(d)
-            self.get_district_data()
-        return self.target_location_details.get('ilce', '') if self.target_location_details else ''
-    
-    def get_district_data(self):
-        if not self.district_name:
-            print("No district name provided.")
-            return
-        
-        # İlçeye özel veri almak için doğru URL'yi kullanıyoruz
-        district_data_url = f"https://servis.mgm.gov.tr/web/merkezler?il={self.location}&ilce={self.district_name}"
-        district_data = self.request(district_data_url)
-
-        if not isinstance(district_data, list) or len(district_data) == 0:
-            print(f"No district data found for {self.district_name} in {self.location}")
-            return
-
-        self.target_location_details = district_data[0]
-        self.location_id = self.target_location_details.get("merkezId")
-        self.longitude = self.target_location_details.get("boylam")
-        self.latitude = self.target_location_details.get("enlem")
-        self.fetch_district_weather_data()
-
-    def fetch_district_weather_data(self):
-        if not self.location_id:
-            print("No location ID found.")
-            return
-        
-        district_weather_url = f"https://servis.mgm.gov.tr/web/sondurumlar?merkezid={self.location_id}"
-        district_weather = self.request(district_weather_url)
-
-        if not isinstance(district_weather, list) or len(district_weather) == 0:
-            print(f"No weather data found for district {self.district_name} in {self.location}")
-            return
-        
-        self.current_degree = district_weather[0].get("sicaklik")
-        print(f"Current Temperature in {self.location} - {self.district_name}: {self.current_degree} °C")
-
-def get_all_provinces():
-    return {
-        "adana": ["merkez", "seyhan", "cukurova", "yuregir", "ceyhan", "sarıçam", "akdeniz", "karaisalı", "karataş"],
-        # Diğer iller ve ilçeler
-    }
-
-def fetch_all_weather_data():
-    provinces = get_all_provinces()
-    weather_data = []
-
-    for province, districts in provinces.items():
-        weather = MGMWeather(province)
-        for district in districts:
-            weather.district(district)
-            if weather.current_degree is not None:
-                weather_data.append({
-                    "Province": province.title(),
-                    "District": district.title(),
-                    "Latitude": weather.latitude,
-                    "Longitude": weather.longitude,
-                    "Temperature": weather.current_degree
-                })
-
-    df = pd.DataFrame(weather_data)
-    return df
-
-def plot_temperature_on_map(df):
-    # Sıcaklık değeri -9999 olan verileri filtreleyin
-    df_filtered = df[df['Temperature'] != -9999]
-    
-    # Haritayı oluşturun
-    m = folium.Map(location=[39.9334, 32.8597], zoom_start=6)
-    
-    # Sıcaklık değerine göre renkleri belirleyin
-    def get_color(temp):
-        if temp < 0:
-            return '#0000ff'  # Mavi
-        elif 0 <= temp < 5:
-            return '#3399ff'  # Açık Mavi
-        elif 5 <= temp < 10:
-            return '#66ccff'  # Daha Açık Mavi
-        elif 10 <= temp < 15:
-            return '#00cccc'  # Cyan
-        elif 15 <= temp < 20:
-            return '#00b3b3'  # Daha Koyu Cyan
-        elif 20 <= temp < 25:
-            return '#ffff66'  # Açık Sarı
-        elif 25 <= temp < 30:
-            return '#ffcc33'  # Koyu Sarı
-        elif 30 <= temp < 35:
-            return '#ff9999'  # Açık Kırmızı
-        else:
-            return '#ff3333'  # Koyu Kırmızı
-    
-    # Verileri harita üzerine ekleyin
-    for idx, row in df_filtered.iterrows():
-        folium.CircleMarker(
-            location=[row['Latitude'], row['Longitude']],
-            radius=10,
-            color=get_color(row['Temperature']),
-            fill=True,
-            fill_color=get_color(row['Temperature']),
-            fill_opacity=0.6,
-            popup=f"{row['District']}: {row['Temperature']}°C"
-        ).add_to(m)
-    
-    # Haritayı HTML dosyası olarak kaydedin
-    m.save('map.html')
-
-# Ana kod bloğu
-if __name__ == "__main__":
-    df_weather = fetch_all_weather_data()
-    plot_temperature_on_map(df_weather)
+fig.show()
